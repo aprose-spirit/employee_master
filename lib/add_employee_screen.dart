@@ -15,8 +15,6 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
   final _company = TextEditingController();
   final _position = TextEditingController();
   final _idNumber = TextEditingController();
-  final _updatedIdNumber = TextEditingController();
-
   // Personal
   final _birthday = TextEditingController();
   final _address = TextEditingController();
@@ -40,7 +38,6 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
     _company.dispose();
     _position.dispose();
     _idNumber.dispose();
-    _updatedIdNumber.dispose();
     _birthday.dispose();
     _address.dispose();
     _govInfo.dispose();
@@ -151,9 +148,7 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                               const SizedBox(height: 16),
                               _LabeledInput(label: 'ID Number *', controller: _idNumber, requiredField: true),
                               const SizedBox(height: 16),
-                              _LabeledInput(label: 'Updated ID Number', controller: _updatedIdNumber),
-                              const SizedBox(height: 24),
-
+                    
                               _DividerLine(),
                               const SizedBox(height: 16),
                               _SectionTitle('Personal Information'),
