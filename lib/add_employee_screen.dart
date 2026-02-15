@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/employee.dart';
 
 class AddEmployeeOverlay extends StatefulWidget {
   const AddEmployeeOverlay({super.key});
@@ -15,10 +16,11 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
   final _company = TextEditingController();
   final _position = TextEditingController();
   final _idNumber = TextEditingController();
+
   // Personal
   final _birthday = TextEditingController();
   final _address = TextEditingController();
-  final _govInfo = TextEditingController(text: 'SSS: , PhilHealth: ');
+  final _govInfo = TextEditingController();
 
   // Contact
   final _email = TextEditingController();
@@ -53,20 +55,50 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
-    // Later: Navigator.pop(context, employeeData);
-    Navigator.pop(context);
+    final id = _idNumber.text.trim();
+    final name = _name.text.trim();
+    final position = _position.text.trim();
+    final email = _email.text.trim();
+    final number = _contactNumber.text.trim();
+    final company = _company.text.trim();
+
+    final qrData = EmployeeQr.buildQrData(
+      idNumber: id,
+      name: name,
+      position: position,
+      email: email,
+      number: number,
+      company: company,
+    );
+
+    final employee = Employee(
+      name: name,
+      company: company,
+      position: position,
+      idNumber: id,
+      birthday: _birthday.text.trim(),
+      address: _address.text.trim(),
+      govInfo: _govInfo.text.trim(),
+      email: email,
+      contactNumber: number,
+      emergencyName: _emergencyName.text.trim(),
+      emergencyNumber: _emergencyNumber.text.trim(),
+      photoUrl: _photoUrl.text.trim(),
+      signatureUrl: _signatureUrl.text.trim(),
+      qrData: qrData,
+    );
+
+    Navigator.pop(context, employee);
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-
-    // Keep 600x701 look, but responsive on smaller screens
     final width = size.width < 640 ? size.width * 0.94 : 600.0;
     final height = size.height < 760 ? size.height * 0.92 : 701.0;
 
     return Material(
-      color: Colors.black.withOpacity(0.55), // backdrop
+      color: Colors.black.withOpacity(0.55),
       child: Center(
         child: Container(
           width: width,
@@ -76,26 +108,14 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: const Color(0x4C00D9FF), width: 1),
             boxShadow: const [
-              BoxShadow(
-                color: Color(0x19000000),
-                blurRadius: 6,
-                offset: Offset(0, 4),
-                spreadRadius: -4,
-              ),
-              BoxShadow(
-                color: Color(0x19000000),
-                blurRadius: 15,
-                offset: Offset(0, 10),
-                spreadRadius: -3,
-              ),
+              BoxShadow(color: Color(0x19000000), blurRadius: 6, offset: Offset(0, 4), spreadRadius: -4),
+              BoxShadow(color: Color(0x19000000), blurRadius: 15, offset: Offset(0, 10), spreadRadius: -3),
             ],
           ),
           child: Stack(
             children: [
-              // Content layout
               Column(
                 children: [
-                  // Header
                   Padding(
                     padding: const EdgeInsets.fromLTRB(25, 25, 25, 0),
                     child: Column(
@@ -103,30 +123,17 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                       children: [
                         const Text(
                           'Add New Employee',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, height: 1),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Enter the details of the new employee.',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.60),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            height: 1.43,
-                          ),
+                          style: TextStyle(color: Colors.white.withOpacity(0.60), fontSize: 14, fontWeight: FontWeight.w400, height: 1.43),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Form (scrollable)
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(25, 0, 25, 0),
@@ -148,7 +155,7 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                               const SizedBox(height: 16),
                               _LabeledInput(label: 'ID Number *', controller: _idNumber, requiredField: true),
                               const SizedBox(height: 16),
-                    
+
                               _DividerLine(),
                               const SizedBox(height: 16),
                               _SectionTitle('Personal Information'),
@@ -206,8 +213,6 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                       ),
                     ),
                   ),
-
-                  // Footer actions (pinned)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
                     child: Row(
@@ -221,8 +226,6 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                   ),
                 ],
               ),
-
-              // Close (X) top right
               Positioned(
                 right: 17,
                 top: 17,
@@ -234,9 +237,7 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                     child: const SizedBox(
                       width: 28,
                       height: 28,
-                      child: Center(
-                        child: Icon(Icons.close, size: 18, color: Colors.white),
-                      ),
+                      child: Center(child: Icon(Icons.close, size: 18, color: Colors.white)),
                     ),
                   ),
                 ),
@@ -249,7 +250,7 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
   }
 }
 
-/* ================= SMALL WIDGETS ================= */
+/* ==== small widgets unchanged ==== */
 
 class _SectionTitle extends StatelessWidget {
   final String text;
@@ -259,21 +260,14 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        height: 1.43,
-      ),
+      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400, height: 1.43),
     );
   }
 }
 
 class _DividerLine extends StatelessWidget {
   @override
-  Widget build(BuildContext context) {
-    return Container(height: 1, color: const Color(0x4C00D9FF));
-  }
+  Widget build(BuildContext context) => Container(height: 1, color: const Color(0x4C00D9FF));
 }
 
 class _LabeledInput extends StatelessWidget {
@@ -293,20 +287,10 @@ class _LabeledInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hint = '';
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            height: 1,
-          ),
-        ),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400, height: 1)),
         const SizedBox(height: 8),
         SizedBox(
           height: fieldHeight,
@@ -314,11 +298,9 @@ class _LabeledInput extends StatelessWidget {
             controller: controller,
             maxLines: maxLines,
             style: const TextStyle(color: Colors.white, fontSize: 16),
-            validator: requiredField
-                ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
-                : null,
+            validator: requiredField ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null : null,
             decoration: InputDecoration(
-              hintText: hint,
+              hintText: '',
               hintStyle: TextStyle(color: Colors.white.withOpacity(0.60)),
               filled: true,
               fillColor: const Color(0x7F141428),
