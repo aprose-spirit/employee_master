@@ -32,7 +32,7 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
   late final TextEditingController emergencyName;
   late final TextEditingController emergencyNumber;
 
-  // ✅ “missing” details
+  // ✅ extra details
   late final TextEditingController photoUrl;
   late final TextEditingController signatureUrl;
   late final TextEditingController qrData;
@@ -95,25 +95,23 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
 
   /// Picks an image file and stores it into:
   ///   <app_documents>/employee_assets/<prefix>_<timestamp>.<ext>
-  /// Returns the stored path (or file name on web).
+  /// Returns the stored filename (or file name on web).
   Future<String?> _pickAndStoreImage({required String prefix}) async {
     try {
       final res = await FilePicker.platform.pickFiles(
         type: FileType.image,
-        withData: kIsWeb, // bytes only needed on web (no real path)
+        withData: kIsWeb,
       );
 
       if (res == null || res.files.isEmpty) return null;
-
       final f = res.files.first;
 
       // ✅ Web: no stable filesystem path to copy to
       if (kIsWeb) {
-        // store only file name (best you can do without converting)
-        final name = (f.name).trim();
-        if (name.isEmpty) return null;
-        _toast('Picked (web): $name');
-        return name;
+        final picked = (f.name).trim();
+        if (picked.isEmpty) return null;
+        _toast('Picked (web): $picked');
+        return picked;
       }
 
       // ✅ Desktop/Mobile: copy file into app documents folder
@@ -135,10 +133,9 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
       final outPath = p.join(outDir.path, outName);
 
       await srcFile.copy(outPath);
-      _toast('Saved to app assets: $outName');
+      _toast('Saved: $outName');
 
-      // You can store either full path or just filename.
-      // If you want just filename, return outName.
+      // Store only the filename (consistent with refs)
       return outName;
     } catch (e) {
       _toast('Pick failed: $e');
@@ -197,195 +194,200 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
       child: _CardShell(
         title: 'Edit Employee',
         subtitle: original.name,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.80, // ✅ height cap
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
 
-                _Row2(
-                  left: _field(idNumber, 'ID Number', required: true),
-                  right: _field(name, 'Name', required: true),
-                ),
-                const SizedBox(height: 10),
-
-                _Row2(
-                  left: _field(company, 'Company'),
-                  right: _field(position, 'Position'),
-                ),
-                const SizedBox(height: 10),
-
-                _Row2(
-                  left: _field(contactNumber, 'Contact Number'),
-                  right: _field(email, 'Email'),
-                ),
-                const SizedBox(height: 10),
-
-                _Row2(
-                  left: _field(birthday, 'Birthday'),
-                  right: _field(govInfo, 'Government Info'),
-                ),
-                const SizedBox(height: 10),
-
-                _field(address, 'Address', maxLines: 2),
-                const SizedBox(height: 10),
-
-                _Row2(
-                  left: _field(emergencyName, 'Emergency Name'),
-                  right: _field(emergencyNumber, 'Emergency Number'),
-                ),
-
-                const SizedBox(height: 18),
-                const _SectionTitle('Assets / References'),
-                const SizedBox(height: 10),
-
-                // Photo + Signature pickers
-                _Row2(
-                  left: _pickField(
-                    controller: photoUrl,
-                    label: 'Photo Ref',
-                    onPick: _pickPhoto,
-                    icon: Icons.photo,
-                    hint: 'Pick image → stored filename/path',
+                  _Row2(
+                    left: _field(idNumber, 'ID Number', required: true),
+                    right: _field(name, 'Name', required: true),
                   ),
-                  right: _pickField(
-                    controller: signatureUrl,
-                    label: 'Signature Ref',
-                    onPick: _pickSignature,
-                    icon: Icons.draw,
-                    hint: 'Pick image → stored filename/path',
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // ID front/back pickers
-                _Row2(
-                  left: _pickField(
-                    controller: idFrontRef,
-                    label: 'ID Front Ref',
-                    onPick: _pickIdFront,
-                    icon: Icons.badge,
-                    hint: 'Pick image → stored filename/path',
-                  ),
-                  right: _pickField(
-                    controller: idBackRef,
-                    label: 'ID Back Ref',
-                    onPick: _pickIdBack,
-                    icon: Icons.badge_outlined,
-                    hint: 'Pick image → stored filename/path',
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-                const _SectionTitle('QR Data'),
-                const SizedBox(height: 10),
-
-                _field(qrData, 'QR Data (JSON or short code)', maxLines: 3),
-                const SizedBox(height: 10),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _fillShortQr,
-                        icon: const Icon(Icons.qr_code_2, size: 16),
-                        label: const Text('Use short QR (EMP:ID)'),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
-                          foregroundColor: Colors.white,
-                          backgroundColor: const Color(0xFF0A0A0F),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _fillJsonQr,
-                        icon: const Icon(Icons.data_object, size: 16),
-                        label: const Text('Build JSON QR'),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
-                          foregroundColor: Colors.white,
-                          backgroundColor: const Color(0xFF0A0A0F),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Cancel'),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
-                        foregroundColor: Colors.white,
-                        backgroundColor: const Color(0xFF0A0A0F),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        if (!_formKey.currentState!.validate()) return;
-
-                        final updated = original.copyWith(
-                          idNumber: idNumber.text.trim(),
-                          name: name.text.trim(),
-                          company: company.text.trim(),
-                          position: position.text.trim(),
-                          birthday: birthday.text.trim(),
-                          address: address.text.trim(),
-                          govInfo: govInfo.text.trim(),
-                          email: email.text.trim(),
-                          contactNumber: contactNumber.text.trim(),
-                          emergencyName: emergencyName.text.trim(),
-                          emergencyNumber: emergencyNumber.text.trim(),
-
-                          photoUrl: photoUrl.text.trim(),
-                          signatureUrl: signatureUrl.text.trim(),
-                          qrData: qrData.text.trim(),
-                          idFrontRef: idFrontRef.text.trim(),
-                          idBackRef: idBackRef.text.trim(),
-                        );
-
-                        final finalQr = updated.qrData.trim().isNotEmpty
-                            ? updated.qrData.trim()
-                            : 'EMP:${updated.idNumber.trim()}';
-
-                        Navigator.pop(context, updated.copyWith(qrData: finalQr));
-                      },
-                      icon: const Icon(Icons.save, size: 16, color: Color(0xFF0A0A0F)),
-                      label: const Text(
-                        'Save',
-                        style: TextStyle(color: Color(0xFF0A0A0F), fontWeight: FontWeight.w700),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00D9FF),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-
-                if (kIsWeb) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    'Note: On Flutter Web, picked images cannot be copied to an app folder.\n'
-                    'This will store only the file name ref.',
-                    textAlign: TextAlign.left,
-                    style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12),
+
+                  _Row2(
+                    left: _field(company, 'Company'),
+                    right: _field(position, 'Position'),
                   ),
+                  const SizedBox(height: 10),
+
+                  _Row2(
+                    left: _field(contactNumber, 'Contact Number'),
+                    right: _field(email, 'Email'),
+                  ),
+                  const SizedBox(height: 10),
+
+                  _Row2(
+                    left: _field(birthday, 'Birthday'),
+                    right: _field(govInfo, 'Government Info'),
+                  ),
+                  const SizedBox(height: 10),
+
+                  _field(address, 'Address', maxLines: 2),
+                  const SizedBox(height: 10),
+
+                  _Row2(
+                    left: _field(emergencyName, 'Emergency Name'),
+                    right: _field(emergencyNumber, 'Emergency Number'),
+                  ),
+
+                  const SizedBox(height: 18),
+                  const _SectionTitle('Assets / References'),
+                  const SizedBox(height: 10),
+
+                  _Row2(
+                    left: _pickField(
+                      controller: photoUrl,
+                      label: 'Photo Ref',
+                      onPick: _pickPhoto,
+                      icon: Icons.photo,
+                      hint: 'Pick image → stored filename/path',
+                    ),
+                    right: _pickField(
+                      controller: signatureUrl,
+                      label: 'Signature Ref',
+                      onPick: _pickSignature,
+                      icon: Icons.draw,
+                      hint: 'Pick image → stored filename/path',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  _Row2(
+                    left: _pickField(
+                      controller: idFrontRef,
+                      label: 'ID Front Ref',
+                      onPick: _pickIdFront,
+                      icon: Icons.badge,
+                      hint: 'Pick image → stored filename/path',
+                    ),
+                    right: _pickField(
+                      controller: idBackRef,
+                      label: 'ID Back Ref',
+                      onPick: _pickIdBack,
+                      icon: Icons.badge_outlined,
+                      hint: 'Pick image → stored filename/path',
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+                  const _SectionTitle('QR Data'),
+                  const SizedBox(height: 10),
+
+                  _field(qrData, 'QR Data (JSON or short code)', maxLines: 3),
+                  const SizedBox(height: 10),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _fillShortQr,
+                          icon: const Icon(Icons.qr_code_2, size: 16),
+                          label: const Text('Use short QR (EMP:ID)'),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
+                            foregroundColor: Colors.white,
+                            backgroundColor: const Color(0xFF0A0A0F),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _fillJsonQr,
+                          icon: const Icon(Icons.data_object, size: 16),
+                          label: const Text('Build JSON QR'),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
+                            foregroundColor: Colors.white,
+                            backgroundColor: const Color(0xFF0A0A0F),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Cancel'),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
+                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFF0A0A0F),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          if (!_formKey.currentState!.validate()) return;
+
+                          final updated = original.copyWith(
+                            idNumber: idNumber.text.trim(),
+                            name: name.text.trim(),
+                            company: company.text.trim(),
+                            position: position.text.trim(),
+                            birthday: birthday.text.trim(),
+                            address: address.text.trim(),
+                            govInfo: govInfo.text.trim(),
+                            email: email.text.trim(),
+                            contactNumber: contactNumber.text.trim(),
+                            emergencyName: emergencyName.text.trim(),
+                            emergencyNumber: emergencyNumber.text.trim(),
+
+                            photoUrl: photoUrl.text.trim(),
+                            signatureUrl: signatureUrl.text.trim(),
+                            qrData: qrData.text.trim(),
+                            idFrontRef: idFrontRef.text.trim(),
+                            idBackRef: idBackRef.text.trim(),
+                          );
+
+                          final finalQr = updated.qrData.trim().isNotEmpty
+                              ? updated.qrData.trim()
+                              : 'EMP:${updated.idNumber.trim()}';
+
+                          Navigator.pop(context, updated.copyWith(qrData: finalQr));
+                        },
+                        icon: const Icon(Icons.save, size: 16, color: Color(0xFF0A0A0F)),
+                        label: const Text(
+                          'Save',
+                          style: TextStyle(
+                            color: Color(0xFF0A0A0F),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00D9FF),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  if (kIsWeb) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Note: On Flutter Web, picked images cannot be copied to an app folder.\n'
+                      'This will store only the file name ref.',
+                      textAlign: TextAlign.left,
+                      style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
