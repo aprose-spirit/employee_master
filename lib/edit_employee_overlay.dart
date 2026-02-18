@@ -1,5 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
 import 'models/employee.dart';
 
 class EditEmployeeOverlay extends StatefulWidget {
@@ -25,6 +32,13 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
   late final TextEditingController emergencyName;
   late final TextEditingController emergencyNumber;
 
+  // ✅ “missing” details
+  late final TextEditingController photoUrl;
+  late final TextEditingController signatureUrl;
+  late final TextEditingController qrData;
+  late final TextEditingController idFrontRef;
+  late final TextEditingController idBackRef;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +55,12 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
     contactNumber = TextEditingController(text: e.contactNumber);
     emergencyName = TextEditingController(text: e.emergencyName);
     emergencyNumber = TextEditingController(text: e.emergencyNumber);
+
+    photoUrl = TextEditingController(text: e.photoUrl);
+    signatureUrl = TextEditingController(text: e.signatureUrl);
+    qrData = TextEditingController(text: e.qrData);
+    idFrontRef = TextEditingController(text: e.idFrontRef);
+    idBackRef = TextEditingController(text: e.idBackRef);
   }
 
   @override
@@ -56,7 +76,115 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
     contactNumber.dispose();
     emergencyName.dispose();
     emergencyNumber.dispose();
+
+    photoUrl.dispose();
+    signatureUrl.dispose();
+    qrData.dispose();
+    idFrontRef.dispose();
+    idBackRef.dispose();
+
     super.dispose();
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  /// Picks an image file and stores it into:
+  ///   <app_documents>/employee_assets/<prefix>_<timestamp>.<ext>
+  /// Returns the stored path (or file name on web).
+  Future<String?> _pickAndStoreImage({required String prefix}) async {
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: kIsWeb, // bytes only needed on web (no real path)
+      );
+
+      if (res == null || res.files.isEmpty) return null;
+
+      final f = res.files.first;
+
+      // ✅ Web: no stable filesystem path to copy to
+      if (kIsWeb) {
+        // store only file name (best you can do without converting)
+        final name = (f.name).trim();
+        if (name.isEmpty) return null;
+        _toast('Picked (web): $name');
+        return name;
+      }
+
+      // ✅ Desktop/Mobile: copy file into app documents folder
+      final srcPath = f.path;
+      if (srcPath == null || srcPath.isEmpty) return null;
+
+      final srcFile = File(srcPath);
+      if (!await srcFile.exists()) return null;
+
+      final docDir = await getApplicationDocumentsDirectory();
+      final outDir = Directory(p.join(docDir.path, 'employee_assets'));
+      if (!await outDir.exists()) {
+        await outDir.create(recursive: true);
+      }
+
+      final ext = p.extension(srcPath).isNotEmpty ? p.extension(srcPath) : '.png';
+      final safePrefix = prefix.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      final outName = '${safePrefix}_${DateTime.now().millisecondsSinceEpoch}$ext';
+      final outPath = p.join(outDir.path, outName);
+
+      await srcFile.copy(outPath);
+      _toast('Saved to app assets: $outName');
+
+      // You can store either full path or just filename.
+      // If you want just filename, return outName.
+      return outName;
+    } catch (e) {
+      _toast('Pick failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    final stored = await _pickAndStoreImage(prefix: 'photo');
+    if (stored == null) return;
+    setState(() => photoUrl.text = stored);
+  }
+
+  Future<void> _pickSignature() async {
+    final stored = await _pickAndStoreImage(prefix: 'signature');
+    if (stored == null) return;
+    setState(() => signatureUrl.text = stored);
+  }
+
+  Future<void> _pickIdFront() async {
+    final stored = await _pickAndStoreImage(prefix: 'id_front');
+    if (stored == null) return;
+    setState(() => idFrontRef.text = stored);
+  }
+
+  Future<void> _pickIdBack() async {
+    final stored = await _pickAndStoreImage(prefix: 'id_back');
+    if (stored == null) return;
+    setState(() => idBackRef.text = stored);
+  }
+
+  void _fillShortQr() {
+    final id = idNumber.text.trim();
+    setState(() => qrData.text = id.isEmpty ? '' : 'EMP:$id');
+  }
+
+  void _fillJsonQr() {
+    final data = {
+      "id": idNumber.text.trim(),
+      "name": name.text.trim(),
+      "position": position.text.trim(),
+      "email": email.text.trim(),
+      "number": contactNumber.text.trim(),
+      "company": company.text.trim(),
+    };
+    setState(() => qrData.text = jsonEncode(data));
   }
 
   @override
@@ -75,34 +203,120 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
             child: Column(
               children: [
                 const SizedBox(height: 8),
+
                 _Row2(
                   left: _field(idNumber, 'ID Number', required: true),
                   right: _field(name, 'Name', required: true),
                 ),
                 const SizedBox(height: 10),
+
                 _Row2(
                   left: _field(company, 'Company'),
                   right: _field(position, 'Position'),
                 ),
                 const SizedBox(height: 10),
+
                 _Row2(
                   left: _field(contactNumber, 'Contact Number'),
                   right: _field(email, 'Email'),
                 ),
                 const SizedBox(height: 10),
+
                 _Row2(
                   left: _field(birthday, 'Birthday'),
                   right: _field(govInfo, 'Government Info'),
                 ),
                 const SizedBox(height: 10),
+
                 _field(address, 'Address', maxLines: 2),
                 const SizedBox(height: 10),
+
                 _Row2(
                   left: _field(emergencyName, 'Emergency Name'),
                   right: _field(emergencyNumber, 'Emergency Number'),
                 ),
-                const SizedBox(height: 18),
 
+                const SizedBox(height: 18),
+                const _SectionTitle('Assets / References'),
+                const SizedBox(height: 10),
+
+                // Photo + Signature pickers
+                _Row2(
+                  left: _pickField(
+                    controller: photoUrl,
+                    label: 'Photo Ref',
+                    onPick: _pickPhoto,
+                    icon: Icons.photo,
+                    hint: 'Pick image → stored filename/path',
+                  ),
+                  right: _pickField(
+                    controller: signatureUrl,
+                    label: 'Signature Ref',
+                    onPick: _pickSignature,
+                    icon: Icons.draw,
+                    hint: 'Pick image → stored filename/path',
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // ID front/back pickers
+                _Row2(
+                  left: _pickField(
+                    controller: idFrontRef,
+                    label: 'ID Front Ref',
+                    onPick: _pickIdFront,
+                    icon: Icons.badge,
+                    hint: 'Pick image → stored filename/path',
+                  ),
+                  right: _pickField(
+                    controller: idBackRef,
+                    label: 'ID Back Ref',
+                    onPick: _pickIdBack,
+                    icon: Icons.badge_outlined,
+                    hint: 'Pick image → stored filename/path',
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+                const _SectionTitle('QR Data'),
+                const SizedBox(height: 10),
+
+                _field(qrData, 'QR Data (JSON or short code)', maxLines: 3),
+                const SizedBox(height: 10),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _fillShortQr,
+                        icon: const Icon(Icons.qr_code_2, size: 16),
+                        label: const Text('Use short QR (EMP:ID)'),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
+                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFF0A0A0F),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _fillJsonQr,
+                        icon: const Icon(Icons.data_object, size: 16),
+                        label: const Text('Build JSON QR'),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0x7F00D9FF), width: 1),
+                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFF0A0A0F),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 18),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -122,7 +336,7 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
                       onPressed: () {
                         if (!_formKey.currentState!.validate()) return;
 
-                        final updatedBase = original.copyWith(
+                        final updated = original.copyWith(
                           idNumber: idNumber.text.trim(),
                           name: name.text.trim(),
                           company: company.text.trim(),
@@ -135,17 +349,18 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
                           emergencyName: emergencyName.text.trim(),
                           emergencyNumber: emergencyNumber.text.trim(),
 
-                          // ✅ NEW: preserve refs (in case copyWith defaults change elsewhere)
-                          idFrontRef: original.idFrontRef,
-                          idBackRef: original.idBackRef,
+                          photoUrl: photoUrl.text.trim(),
+                          signatureUrl: signatureUrl.text.trim(),
+                          qrData: qrData.text.trim(),
+                          idFrontRef: idFrontRef.text.trim(),
+                          idBackRef: idBackRef.text.trim(),
                         );
 
-                        // ✅ Keep existing qrData if present, else generate SHORT scannable one
-                        final qr = updatedBase.qrData.trim().isNotEmpty
-                            ? updatedBase.qrData
-                            : 'EMP:${updatedBase.idNumber}';
+                        final finalQr = updated.qrData.trim().isNotEmpty
+                            ? updated.qrData.trim()
+                            : 'EMP:${updated.idNumber.trim()}';
 
-                        Navigator.pop(context, updatedBase.copyWith(qrData: qr));
+                        Navigator.pop(context, updated.copyWith(qrData: finalQr));
                       },
                       icon: const Icon(Icons.save, size: 16, color: Color(0xFF0A0A0F)),
                       label: const Text(
@@ -160,6 +375,16 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
                   ],
                 ),
                 const SizedBox(height: 6),
+
+                if (kIsWeb) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Note: On Flutter Web, picked images cannot be copied to an app folder.\n'
+                    'This will store only the file name ref.',
+                    textAlign: TextAlign.left,
+                    style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),
@@ -198,6 +423,48 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
           borderSide: const BorderSide(color: Color(0xFF00D9FF), width: 1.2),
         ),
       ),
+    );
+  }
+
+  Widget _pickField({
+    required TextEditingController controller,
+    required String label,
+    required VoidCallback onPick,
+    required IconData icon,
+    String? hint,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: controller,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hint,
+              hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 12),
+              labelStyle: TextStyle(color: Colors.white.withOpacity(0.70)),
+              filled: true,
+              fillColor: const Color(0x5B141428),
+              isDense: true,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0x4C00D9FF), width: 1.1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFF00D9FF), width: 1.2),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: onPick,
+          icon: Icon(icon, color: const Color(0xFF00D9FF)),
+          tooltip: 'Pick image',
+        ),
+      ],
     );
   }
 }
@@ -315,6 +582,26 @@ class _TopBar extends StatelessWidget {
           icon: const Icon(Icons.close, color: Colors.white),
         ),
       ],
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 13,
+        ),
+      ),
     );
   }
 }

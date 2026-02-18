@@ -22,8 +22,6 @@ class Employee {
   /// Small JSON payload used to generate QR (shown in UI via qr_flutter)
   final String qrData;
 
-  /// ✅ NEW: markers for "ID Front/Back exist"
-  /// The real bytes live in HomeScreen maps and are embedded into XLSX on export.
   final String idFrontRef;
   final String idBackRef;
 
