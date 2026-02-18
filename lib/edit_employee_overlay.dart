@@ -134,6 +134,10 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
                           contactNumber: contactNumber.text.trim(),
                           emergencyName: emergencyName.text.trim(),
                           emergencyNumber: emergencyNumber.text.trim(),
+
+                          // ✅ NEW: preserve refs (in case copyWith defaults change elsewhere)
+                          idFrontRef: original.idFrontRef,
+                          idBackRef: original.idBackRef,
                         );
 
                         // ✅ Keep existing qrData if present, else generate SHORT scannable one
@@ -144,8 +148,10 @@ class _EditEmployeeOverlayState extends State<EditEmployeeOverlay> {
                         Navigator.pop(context, updatedBase.copyWith(qrData: qr));
                       },
                       icon: const Icon(Icons.save, size: 16, color: Color(0xFF0A0A0F)),
-                      label: const Text('Save',
-                          style: TextStyle(color: Color(0xFF0A0A0F), fontWeight: FontWeight.w700)),
+                      label: const Text(
+                        'Save',
+                        style: TextStyle(color: Color(0xFF0A0A0F), fontWeight: FontWeight.w700),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF00D9FF),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -286,17 +292,21 @@ class _TopBar extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  )),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13)),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13),
+              ),
             ],
           ),
         ),

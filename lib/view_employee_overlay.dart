@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'models/employee.dart';
@@ -5,9 +7,15 @@ import 'models/employee.dart';
 class ViewEmployeeOverlay extends StatelessWidget {
   final Employee employee;
 
+  // ✅ NEW
+  final Uint8List? idFrontBytes;
+  final Uint8List? idBackBytes;
+
   const ViewEmployeeOverlay({
     super.key,
     required this.employee,
+    this.idFrontBytes,
+    this.idBackBytes,
   });
 
   @override
@@ -18,7 +26,6 @@ class ViewEmployeeOverlay extends StatelessWidget {
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: ConstrainedBox(
-        // ✅ whole dialog is constrained (prevents overflow)
         constraints: BoxConstraints(
           maxWidth: 720,
           maxHeight: MediaQuery.of(context).size.height * 0.88,
@@ -26,14 +33,12 @@ class ViewEmployeeOverlay extends StatelessWidget {
         child: _CardShell(
           title: 'Employee Details',
           subtitle: employee.name,
-
-          // ✅ scrollable content only
           child: _ScrollableBody(
             qrData: qrData,
             employee: employee,
+            idFrontBytes: idFrontBytes,
+            idBackBytes: idBackBytes,
           ),
-
-          // ✅ fixed footer (not scrolling)
           footer: Align(
             alignment: Alignment.centerRight,
             child: OutlinedButton.icon(
@@ -56,21 +61,22 @@ class ViewEmployeeOverlay extends StatelessWidget {
   String _ensureQr(Employee e) {
     final raw = (e.qrData).trim();
     if (raw.isNotEmpty) return raw;
-
-    // ✅ short QR for better scanning
     return 'EMP:${e.idNumber}';
   }
 }
-
-/* ================= SCROLL BODY ================= */
 
 class _ScrollableBody extends StatelessWidget {
   final String qrData;
   final Employee employee;
 
+  final Uint8List? idFrontBytes;
+  final Uint8List? idBackBytes;
+
   const _ScrollableBody({
     required this.qrData,
     required this.employee,
+    this.idFrontBytes,
+    this.idBackBytes,
   });
 
   @override
@@ -109,6 +115,12 @@ class _ScrollableBody extends StatelessWidget {
             ),
           ),
 
+          // ✅ NEW ID images section
+          const SizedBox(height: 18),
+          _SectionTitle('ID Card'),
+          const SizedBox(height: 10),
+          _IdImagesRow(front: idFrontBytes, back: idBackBytes),
+
           const SizedBox(height: 18),
           _SectionTitle('Information'),
           const SizedBox(height: 10),
@@ -132,6 +144,57 @@ class _ScrollableBody extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+class _IdImagesRow extends StatelessWidget {
+  final Uint8List? front;
+  final Uint8List? back;
+
+  const _IdImagesRow({required this.front, required this.back});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget card(String title, Uint8List? bytes) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0x5B141428),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0x4C00D9FF), width: 1.1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(color: Colors.white.withOpacity(0.70), fontSize: 12)),
+              const SizedBox(height: 10),
+              AspectRatio(
+                aspectRatio: 16 / 10,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: bytes == null
+                      ? Container(
+                          color: Colors.black.withOpacity(0.25),
+                          alignment: Alignment.center,
+                          child: Text('No image', style: TextStyle(color: Colors.white.withOpacity(0.60))),
+                        )
+                      : Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        card('ID Front', front),
+        const SizedBox(width: 12),
+        card('ID Back', back),
+      ],
     );
   }
 }
@@ -175,10 +238,7 @@ class _CardShell extends StatelessWidget {
             children: [
               _TopBar(title: title, subtitle: subtitle),
               const SizedBox(height: 12),
-
-              // ✅ takes remaining height (so scroll works)
               Expanded(child: child),
-
               const SizedBox(height: 12),
               footer,
             ],
@@ -207,11 +267,7 @@ class _TopBar extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 2),
               Text(
@@ -242,11 +298,7 @@ class _SectionTitle extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -284,10 +336,7 @@ class _InfoGrid extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      it.label,
-                      style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12),
-                    ),
+                    Text(it.label, style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12)),
                     const SizedBox(height: 6),
                     Text(
                       it.value.trim().isEmpty ? '—' : it.value,

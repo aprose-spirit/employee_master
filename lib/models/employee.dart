@@ -22,6 +22,11 @@ class Employee {
   /// Small JSON payload used to generate QR (shown in UI via qr_flutter)
   final String qrData;
 
+  /// ✅ NEW: markers for "ID Front/Back exist"
+  /// The real bytes live in HomeScreen maps and are embedded into XLSX on export.
+  final String idFrontRef;
+  final String idBackRef;
+
   const Employee({
     required this.name,
     required this.company,
@@ -37,6 +42,8 @@ class Employee {
     required this.photoUrl,
     required this.signatureUrl,
     required this.qrData,
+    this.idFrontRef = '',
+    this.idBackRef = '',
   });
 
   Employee copyWith({
@@ -54,6 +61,8 @@ class Employee {
     String? photoUrl,
     String? signatureUrl,
     String? qrData,
+    String? idFrontRef,
+    String? idBackRef,
   }) {
     return Employee(
       name: name ?? this.name,
@@ -70,10 +79,12 @@ class Employee {
       photoUrl: photoUrl ?? this.photoUrl,
       signatureUrl: signatureUrl ?? this.signatureUrl,
       qrData: qrData ?? this.qrData,
+      idFrontRef: idFrontRef ?? this.idFrontRef,
+      idBackRef: idBackRef ?? this.idBackRef,
     );
   }
 
-  /// CSV Export (text-only)
+  /// CSV/XLSX Export (text-only columns)
   List<String> toCsvRow() => [
         name,
         company,
@@ -89,6 +100,8 @@ class Employee {
         photoUrl,
         signatureUrl,
         qrData,
+        idFrontRef,
+        idBackRef,
       ];
 
   static List<String> csvHeader() => const [
@@ -106,13 +119,14 @@ class Employee {
         'photoUrl',
         'signatureUrl',
         'qrData',
+        'idFrontRef',
+        'idBackRef',
       ];
 
-  /// CSV Import (header-based)
+  /// CSV/XLSX Import (header-based)
   static Employee fromCsvMap(Map<String, String> m) {
     String v(String key) => (m[key] ?? '').trim();
 
-    // If old CSV doesn’t have qrData, rebuild it from fields:
     final rebuiltQr = EmployeeQr.buildQrData(
       idNumber: v('idNumber'),
       name: v('name'),
@@ -139,11 +153,14 @@ class Employee {
       photoUrl: v('photoUrl'),
       signatureUrl: v('signatureUrl'),
       qrData: existingQr.isNotEmpty ? existingQr : rebuiltQr,
+
+      // new fields (safe for old files)
+      idFrontRef: v('idFrontRef'),
+      idBackRef: v('idBackRef'),
     );
   }
 }
 
-/// Helper for QR payload creation (same “small data” idea you had in Python)
 class EmployeeQr {
   static String buildQrData({
     required String idNumber,
@@ -153,7 +170,6 @@ class EmployeeQr {
     required String number,
     required String company,
   }) {
-    // minimal payload on purpose (so QR stays readable)
     return jsonEncode({
       "id": idNumber,
       "name": name,

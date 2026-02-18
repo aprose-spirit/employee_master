@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xls;
 import 'package:excel/excel.dart' as ex;
 
-import 'add_employee_screen.dart'; // AddEmployeeOverlay
+import 'add_employee_screen.dart';
 import 'employee_table_section.dart';
 import 'login_screen.dart';
 import 'models/employee.dart';
@@ -26,36 +26,47 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final List<Employee> _employees = [];
 
+  // ✅ store ID images in memory, keyed by idNumber
+  final Map<String, Uint8List> _idFrontById = {};
+  final Map<String, Uint8List> _idBackById = {};
+
   Future<void> _openAddEmployee() async {
-    final employee = await showDialog<Employee>(
+    final result = await showDialog<dynamic>(
       context: context,
       barrierDismissible: true,
       builder: (_) => const AddEmployeeOverlay(),
     );
 
-    if (employee == null) return;
+    if (result == null) return;
+    if (result is! Map) return;
 
-    final qrData = employee.qrData.trim().isNotEmpty
-        ? employee.qrData
+    final e = result['employee'];
+    if (e is! Employee) return;
+
+    final Uint8List? front = result['idFrontBytes'] as Uint8List?;
+    final Uint8List? back = result['idBackBytes'] as Uint8List?;
+
+    if (front != null) _idFrontById[e.idNumber] = front;
+    if (back != null) _idBackById[e.idNumber] = back;
+
+    final qrData = e.qrData.trim().isNotEmpty
+        ? e.qrData
         : jsonEncode({
-            "id": employee.idNumber,
-            "name": employee.name,
-            "position": employee.position,
-            "email": employee.email,
-            "number": employee.contactNumber,
-            "company": employee.company,
+            "id": e.idNumber,
+            "name": e.name,
+            "position": e.position,
+            "email": e.email,
+            "number": e.contactNumber,
+            "company": e.company,
           });
 
-    final withQr = employee.copyWith(qrData: qrData);
-
-    setState(() => _employees.add(withQr));
+    setState(() => _employees.add(e.copyWith(qrData: qrData)));
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Employee added (runtime). QR generated in Flutter.')),
+      const SnackBar(content: Text('Employee added.')),
     );
   }
 
-  // ✅ DELETE ALL
   Future<void> _deleteAllEmployees() async {
     if (_employees.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,28 +86,25 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(color: Colors.white.withOpacity(0.75)),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete All'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete All')),
         ],
       ),
     );
 
     if (ok != true) return;
 
-    setState(() => _employees.clear());
+    setState(() {
+      _employees.clear();
+      _idFrontById.clear();
+      _idBackById.clear();
+    });
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('All employees deleted.')),
     );
   }
 
-  // ✅ XLSX Export (with embedded QR images)
   Future<void> _exportXlsx() async {
     if (_employees.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -109,27 +117,35 @@ class _HomeScreenState extends State<HomeScreen> {
     final sheet = workbook.worksheets[0];
     sheet.name = 'Employees';
 
-    final header = Employee.csvHeader(); // must include 'qrData'
+    final header = Employee.csvHeader();
+
     for (int c = 0; c < header.length; c++) {
       final cell = sheet.getRangeByIndex(1, c + 1);
       cell.setText(header[c]);
       cell.cellStyle.bold = true;
     }
 
-    final qrIndex0 = header.indexOf('qrData');
-    if (qrIndex0 == -1) {
+    int colOf(String key) {
+      final i = header.indexOf(key);
+      return i == -1 ? -1 : i + 1;
+    }
+
+    final qrCol = colOf('qrData');
+    final frontCol = colOf('idFrontRef');
+    final backCol = colOf('idBackRef');
+
+    if (qrCol == -1 || frontCol == -1 || backCol == -1) {
       workbook.dispose();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Employee.csvHeader() must include 'qrData'.")),
+        const SnackBar(content: Text("csvHeader() must include qrData, idFrontRef, idBackRef.")),
       );
       return;
     }
-    final qrCol = qrIndex0 + 1;
 
-    const double qrPx = 110.0;
-
-    // px -> approx char width for Syncfusion
-    sheet.getRangeByIndex(1, qrCol).columnWidth = (qrPx / 7.0) + 2;
+    const double imgPx = 110.0;
+    sheet.getRangeByIndex(1, qrCol).columnWidth = (imgPx / 7.0) + 2;
+    sheet.getRangeByIndex(1, frontCol).columnWidth = (imgPx / 7.0) + 2;
+    sheet.getRangeByIndex(1, backCol).columnWidth = (imgPx / 7.0) + 2;
 
     for (int r = 0; r < _employees.length; r++) {
       final emp = _employees[r];
@@ -137,29 +153,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final row = emp.toCsvRow();
       for (int c = 0; c < row.length; c++) {
-        if ((c + 1) == qrCol) continue;
-        sheet.getRangeByIndex(rowIndex, c + 1).setText(row[c]);
+        final colIndex = c + 1;
+        if (colIndex == qrCol || colIndex == frontCol || colIndex == backCol) continue;
+        sheet.getRangeByIndex(rowIndex, colIndex).setText(row[c]);
       }
 
-      // ✅ set row height so the image fits
-      sheet.getRangeByIndex(rowIndex, qrCol).rowHeight = qrPx + 10;
+      sheet.getRangeByIndex(rowIndex, 1).rowHeight = imgPx + 10;
 
+      // QR image
       final data = emp.qrData.trim().isNotEmpty ? emp.qrData.trim() : 'EMP:${emp.idNumber}';
-
-      Uint8List png;
       try {
-        // ✅ create large QR then Excel scales it down
-        png = await QrService.qrPngBytes(data, size: 520);
+        final png = await QrService.qrPngBytes(data, size: 520);
+        final pic = sheet.pictures.addStream(rowIndex, qrCol, png);
+        pic.width = imgPx.toInt();
+        pic.height = imgPx.toInt();
       } catch (_) {
         sheet.getRangeByIndex(rowIndex, qrCol).setText('QR ERR');
-        continue;
       }
 
-      final pic = sheet.pictures.addStream(rowIndex, qrCol, png);
+      // ID Front
+      final frontBytes = _idFrontById[emp.idNumber];
+      if (frontBytes != null) {
+        final pic = sheet.pictures.addStream(rowIndex, frontCol, frontBytes);
+        pic.width = imgPx.toInt();
+        pic.height = imgPx.toInt();
+        sheet.getRangeByIndex(rowIndex, frontCol).setText('embedded');
+      } else {
+        sheet.getRangeByIndex(rowIndex, frontCol).setText('');
+      }
 
-      // ✅ force square
-      pic.width = qrPx.toInt();
-      pic.height = qrPx.toInt();
+      // ID Back
+      final backBytes = _idBackById[emp.idNumber];
+      if (backBytes != null) {
+        final pic = sheet.pictures.addStream(rowIndex, backCol, backBytes);
+        pic.width = imgPx.toInt();
+        pic.height = imgPx.toInt();
+        sheet.getRangeByIndex(rowIndex, backCol).setText('embedded');
+      } else {
+        sheet.getRangeByIndex(rowIndex, backCol).setText('');
+      }
     }
 
     final bytes = workbook.saveAsStream();
@@ -173,11 +205,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('XLSX exported with QR images.')),
+      const SnackBar(content: Text('XLSX exported with QR + ID Front/Back images.')),
     );
   }
 
-  // ✅ XLSX Import (APPEND, not replace)
   Future<void> _importXlsx() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -187,9 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result == null || result.files.isEmpty) return;
 
-    final file = result.files.first;
-    final bytes = file.bytes;
-
+    final bytes = result.files.first.bytes;
     if (bytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not read the selected file.')),
@@ -219,9 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!header.contains('name') || !header.contains('idNumber')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid XLSX header. Missing required columns (name, idNumber).'),
-        ),
+        const SnackBar(content: Text('Invalid XLSX header. Missing required columns (name, idNumber).')),
       );
       return;
     }
@@ -241,16 +268,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       final emp = Employee.fromCsvMap(map);
-
-      // ✅ keep existing qrData if present, else short scannable
       final qrData = emp.qrData.trim().isNotEmpty ? emp.qrData : 'EMP:${emp.idNumber}';
-
       imported.add(emp.copyWith(qrData: qrData));
     }
 
-    setState(() {
-      _employees.addAll(imported);
-    });
+    setState(() => _employees.addAll(imported));
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Imported ${imported.length} employees (appended).')),
@@ -272,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onAdd: _openAddEmployee,
                   onExport: _exportXlsx,
                   onImport: _importXlsx,
-                  onDeleteAll: _deleteAllEmployees, // ✅ new
+                  onDeleteAll: _deleteAllEmployees,
                   onLogout: () {
                     Navigator.pushReplacement(
                       context,
@@ -286,14 +308,25 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: EmployeeTableSection(
                       employees: _employees,
+
+                      // ✅ NEW: pass bytes lookup so the table can show images
+                      idFrontBytesOf: (id) => _idFrontById[id],
+                      idBackBytesOf: (id) => _idBackById[id],
+
                       onView: (e) {
                         showDialog(
                           context: context,
                           barrierDismissible: true,
-                          builder: (_) => ViewEmployeeOverlay(employee: e),
+                          builder: (_) => ViewEmployeeOverlay(
+                            employee: e,
+                            idFrontBytes: _idFrontById[e.idNumber],
+                            idBackBytes: _idBackById[e.idNumber],
+                          ),
                         );
                       },
                       onEdit: (e) async {
+                        final oldId = e.idNumber;
+
                         final updated = await showDialog<Employee>(
                           context: context,
                           barrierDismissible: false,
@@ -302,13 +335,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         if (updated == null) return;
 
+                        final newId = updated.idNumber;
+
                         setState(() {
                           final i = _employees.indexOf(e);
                           if (i != -1) {
                             _employees[i] = updated;
                           } else {
-                            final j = _employees.indexWhere((x) => x.idNumber == e.idNumber);
+                            final j = _employees.indexWhere((x) => x.idNumber == oldId);
                             if (j != -1) _employees[j] = updated;
+                          }
+
+                          // if ID changed, move bytes maps
+                          if (oldId != newId) {
+                            final f = _idFrontById.remove(oldId);
+                            final b = _idBackById.remove(oldId);
+                            if (f != null) _idFrontById[newId] = f;
+                            if (b != null) _idBackById[newId] = b;
                           }
                         });
 
@@ -317,7 +360,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       },
                       onDelete: (e) {
-                        setState(() => _employees.remove(e));
+                        setState(() {
+                          _employees.remove(e);
+                          _idFrontById.remove(e.idNumber);
+                          _idBackById.remove(e.idNumber);
+                        });
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Deleted: ${e.name}')),
                         );
@@ -335,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/* ================= BACKGROUND ================= */
+/* ================= BACKGROUND + HEADER (unchanged UI) ================= */
 
 class _HomeBackground extends StatelessWidget {
   const _HomeBackground();
@@ -358,14 +405,12 @@ class _HomeBackground extends StatelessWidget {
   }
 }
 
-/* ================= HEADER ================= */
-
 class _TopHeader extends StatelessWidget {
   final int employeeCount;
   final VoidCallback onAdd;
   final VoidCallback onExport;
   final VoidCallback onImport;
-  final VoidCallback onDeleteAll; // ✅ new
+  final VoidCallback onDeleteAll;
   final VoidCallback onLogout;
 
   const _TopHeader({
@@ -420,7 +465,7 @@ class _TopHeader extends StatelessWidget {
                   onAdd: onAdd,
                   onExport: onExport,
                   onImport: onImport,
-                  onDeleteAll: onDeleteAll, // ✅ new
+                  onDeleteAll: onDeleteAll,
                   onLogout: onLogout,
                 ),
                 const SizedBox(height: 12),
@@ -457,18 +502,8 @@ class _HeaderIcon extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(10),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0x7F00D9FF),
-            blurRadius: 6,
-            offset: Offset(0, 4),
-            spreadRadius: -4,
-          ),
-          BoxShadow(
-            color: Color(0x7F00D9FF),
-            blurRadius: 15,
-            offset: Offset(0, 10),
-            spreadRadius: -3,
-          ),
+          BoxShadow(color: Color(0x7F00D9FF), blurRadius: 6, offset: Offset(0, 4), spreadRadius: -4),
+          BoxShadow(color: Color(0x7F00D9FF), blurRadius: 15, offset: Offset(0, 10), spreadRadius: -3),
         ],
       ),
       child: const Center(
@@ -485,12 +520,7 @@ class _HeaderTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Text(
       'Employee Master',
-      style: TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.w700,
-        height: 1.33,
-        color: Colors.white,
-      ),
+      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, height: 1.33, color: Colors.white),
     );
   }
 }
@@ -499,7 +529,7 @@ class _HeaderActions extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback onExport;
   final VoidCallback onImport;
-  final VoidCallback onDeleteAll; // ✅ new
+  final VoidCallback onDeleteAll;
   final VoidCallback onLogout;
 
   const _HeaderActions({
@@ -517,11 +547,7 @@ class _HeaderActions extends StatelessWidget {
       runSpacing: 8,
       alignment: WrapAlignment.start,
       children: [
-        _PrimaryActionButton(
-          label: 'Add Employee',
-          icon: Icons.person_add_alt_1,
-          onPressed: onAdd,
-        ),
+        _PrimaryActionButton(label: 'Add Employee', icon: Icons.person_add_alt_1, onPressed: onAdd),
         _OutlineActionButton(
           label: 'Export XLSX',
           icon: Icons.upload_file,
@@ -535,7 +561,6 @@ class _HeaderActions extends StatelessWidget {
           borderColor: const Color(0x7FFF0080),
           onPressed: onImport,
         ),
-        // ✅ NEW: Delete all
         _OutlineActionButton(
           label: 'Delete All',
           icon: Icons.delete_forever,
@@ -553,18 +578,12 @@ class _HeaderActions extends StatelessWidget {
   }
 }
 
-/* ================= BUTTONS ================= */
-
 class _PrimaryActionButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
 
-  const _PrimaryActionButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-  });
+  const _PrimaryActionButton({required this.label, required this.icon, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -579,27 +598,14 @@ class _PrimaryActionButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(8),
           boxShadow: const [
-            BoxShadow(
-              color: Color(0x4C00D9FF),
-              blurRadius: 6,
-              offset: Offset(0, 4),
-              spreadRadius: -4,
-            ),
-            BoxShadow(
-              color: Color(0x4C00D9FF),
-              blurRadius: 15,
-              offset: Offset(0, 10),
-              spreadRadius: -3,
-            ),
+            BoxShadow(color: Color(0x4C00D9FF), blurRadius: 6, offset: Offset(0, 4), spreadRadius: -4),
+            BoxShadow(color: Color(0x4C00D9FF), blurRadius: 15, offset: Offset(0, 10), spreadRadius: -3),
           ],
         ),
         child: ElevatedButton.icon(
           onPressed: onPressed,
           icon: Icon(icon, size: 16, color: const Color(0xFF0A0A0F)),
-          label: Text(
-            label,
-            style: const TextStyle(fontSize: 14, height: 1.43, color: Color(0xFF0A0A0F)),
-          ),
+          label: Text(label, style: const TextStyle(fontSize: 14, height: 1.43, color: Color(0xFF0A0A0F))),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,

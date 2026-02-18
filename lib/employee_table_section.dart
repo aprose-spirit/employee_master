@@ -1,9 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../models/employee.dart';
 
 class EmployeeTableSection extends StatefulWidget {
   final List<Employee> employees;
+
+  // ✅ NEW: provide bytes for thumbnails
+  final Uint8List? Function(String idNumber)? idFrontBytesOf;
+  final Uint8List? Function(String idNumber)? idBackBytesOf;
 
   final void Function(Employee e)? onView;
   final void Function(Employee e)? onEdit;
@@ -12,6 +18,8 @@ class EmployeeTableSection extends StatefulWidget {
   const EmployeeTableSection({
     super.key,
     required this.employees,
+    this.idFrontBytesOf,
+    this.idBackBytesOf,
     this.onView,
     this.onEdit,
     this.onDelete,
@@ -42,7 +50,7 @@ class _EmployeeTableSectionState extends State<EmployeeTableSection> {
           e.contactNumber.toLowerCase().contains(q) ||
           e.email.toLowerCase().contains(q) ||
           e.govInfo.toLowerCase().contains(q) ||
-          e.address.toLowerCase().contains(q) || // ✅ added
+          e.address.toLowerCase().contains(q) ||
           e.emergencyName.toLowerCase().contains(q) ||
           e.emergencyNumber.toLowerCase().contains(q);
     }).toList();
@@ -100,6 +108,8 @@ class _EmployeeTableSectionState extends State<EmployeeTableSection> {
                 )
               : _EmployeeTable(
                   employees: list,
+                  idFrontBytesOf: widget.idFrontBytesOf,
+                  idBackBytesOf: widget.idBackBytesOf,
                   onView: widget.onView,
                   onEdit: widget.onEdit,
                   onDelete: widget.onDelete,
@@ -154,12 +164,18 @@ class _TableCard extends StatelessWidget {
 
 class _EmployeeTable extends StatelessWidget {
   final List<Employee> employees;
+
+  final Uint8List? Function(String idNumber)? idFrontBytesOf;
+  final Uint8List? Function(String idNumber)? idBackBytesOf;
+
   final void Function(Employee e)? onView;
   final void Function(Employee e)? onEdit;
   final void Function(Employee e)? onDelete;
 
   const _EmployeeTable({
     required this.employees,
+    this.idFrontBytesOf,
+    this.idBackBytesOf,
     this.onView,
     this.onEdit,
     this.onDelete,
@@ -173,11 +189,16 @@ class _EmployeeTable extends StatelessWidget {
   static const double wEmail = 280;
   static const double wBirthday = 140;
 
-  static const double wAddress = 280; // ✅ added
+  static const double wAddress = 280;
   static const double wGov = 240;
   static const double wEmergName = 190;
   static const double wEmergNo = 170;
+
   static const double wQr = 120;
+
+  // ✅ NEW thumbnail columns
+  static const double wIdFront = 120;
+  static const double wIdBack = 120;
 
   static const double wActions = 180;
 
@@ -193,11 +214,13 @@ class _EmployeeTable extends StatelessWidget {
         wContact +
         wEmail +
         wBirthday +
-        wAddress + // ✅ added
+        wAddress +
         wGov +
         wEmergName +
         wEmergNo +
         wQr +
+        wIdFront +
+        wIdBack +
         wActions;
 
     return SingleChildScrollView(
@@ -210,6 +233,8 @@ class _EmployeeTable extends StatelessWidget {
             ...employees.map(
               (e) => _DataRow(
                 e: e,
+                idFrontBytesOf: idFrontBytesOf,
+                idBackBytesOf: idBackBytesOf,
                 onView: onView,
                 onEdit: onEdit,
                 onDelete: onDelete,
@@ -236,13 +261,16 @@ class _HeaderRow extends StatelessWidget {
           _CellHeader(text: 'Contact #', width: _EmployeeTable.wContact),
           _CellHeader(text: 'Email', width: _EmployeeTable.wEmail),
           _CellHeader(text: 'Birthday', width: _EmployeeTable.wBirthday),
-
-          _CellHeader(text: 'Address', width: _EmployeeTable.wAddress), // ✅ added
-
+          _CellHeader(text: 'Address', width: _EmployeeTable.wAddress),
           _CellHeader(text: 'Government Info', width: _EmployeeTable.wGov),
           _CellHeader(text: 'Emergency Name', width: _EmployeeTable.wEmergName),
           _CellHeader(text: 'Emergency #', width: _EmployeeTable.wEmergNo),
           _CellHeader(text: 'QR Code', width: _EmployeeTable.wQr),
+
+          // ✅ NEW
+          _CellHeader(text: 'ID Front', width: _EmployeeTable.wIdFront),
+          _CellHeader(text: 'ID Back', width: _EmployeeTable.wIdBack),
+
           _CellHeader(text: 'Actions', width: _EmployeeTable.wActions, alignRight: true),
         ],
       ),
@@ -252,12 +280,17 @@ class _HeaderRow extends StatelessWidget {
 
 class _DataRow extends StatelessWidget {
   final Employee e;
+  final Uint8List? Function(String idNumber)? idFrontBytesOf;
+  final Uint8List? Function(String idNumber)? idBackBytesOf;
+
   final void Function(Employee e)? onView;
   final void Function(Employee e)? onEdit;
   final void Function(Employee e)? onDelete;
 
   const _DataRow({
     required this.e,
+    this.idFrontBytesOf,
+    this.idBackBytesOf,
     this.onView,
     this.onEdit,
     this.onDelete,
@@ -265,6 +298,9 @@ class _DataRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final front = idFrontBytesOf?.call(e.idNumber);
+    final back = idBackBytesOf?.call(e.idNumber);
+
     return SizedBox(
       height: _EmployeeTable.rowH,
       child: Row(
@@ -276,14 +312,16 @@ class _DataRow extends StatelessWidget {
           _CellText(text: e.contactNumber, width: _EmployeeTable.wContact),
           _CellText(text: e.email, width: _EmployeeTable.wEmail, clip: true),
           _CellText(text: e.birthday, width: _EmployeeTable.wBirthday),
-
-          _CellText(text: e.address, width: _EmployeeTable.wAddress, clip: true), // ✅ added
-
+          _CellText(text: e.address, width: _EmployeeTable.wAddress, clip: true),
           _CellText(text: e.govInfo, width: _EmployeeTable.wGov, clip: true),
           _CellText(text: e.emergencyName, width: _EmployeeTable.wEmergName, clip: true),
           _CellText(text: e.emergencyNumber, width: _EmployeeTable.wEmergNo),
 
           _QrCell(data: e.qrData, width: _EmployeeTable.wQr),
+
+          // ✅ NEW: actual image thumbnails
+          _ThumbCell(bytes: front, width: _EmployeeTable.wIdFront),
+          _ThumbCell(bytes: back, width: _EmployeeTable.wIdBack),
 
           _ActionsCell(
             width: _EmployeeTable.wActions,
@@ -303,14 +341,8 @@ class _DataRow extends StatelessWidget {
                           style: TextStyle(color: Colors.white.withOpacity(0.75)),
                         ),
                         actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Delete'),
-                          ),
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
                         ],
                       ),
                     );
@@ -404,6 +436,40 @@ class _CellText extends StatelessWidget {
   }
 }
 
+class _ThumbCell extends StatelessWidget {
+  final Uint8List? bytes;
+  final double width;
+
+  const _ThumbCell({required this.bytes, required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        border: Border(
+          right: BorderSide(color: Color(0x4C00D9FF), width: 1.1),
+          bottom: BorderSide(color: Color(0x4C00D9FF), width: 1.1),
+        ),
+      ),
+      alignment: Alignment.center,
+      child: bytes == null
+          ? Text('—', style: TextStyle(color: Colors.white.withOpacity(0.60), fontSize: 14))
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.memory(
+                bytes!,
+                width: 38,
+                height: 28,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              ),
+            ),
+    );
+  }
+}
+
 class _QrCell extends StatelessWidget {
   final String data;
   final double width;
@@ -425,10 +491,7 @@ class _QrCell extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: cleaned.isEmpty
-          ? Text(
-              '—',
-              style: TextStyle(color: Colors.white.withOpacity(0.60), fontSize: 14),
-            )
+          ? Text('—', style: TextStyle(color: Colors.white.withOpacity(0.60), fontSize: 14))
           : QrImageView(
               data: cleaned,
               version: QrVersions.auto,
@@ -494,7 +557,7 @@ class _ActionsCell extends StatelessWidget {
           const SizedBox(width: 8),
           actionBtn(Icons.edit, onEdit),
           const SizedBox(width: 8),
-          actionBtn(Icons.delete, onDelete), // ✅ delete works + confirm
+          actionBtn(Icons.delete, onDelete),
         ],
       ),
     );

@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../models/employee.dart';
 
@@ -30,9 +33,15 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
   final _emergencyName = TextEditingController();
   final _emergencyNumber = TextEditingController();
 
-  // Documents
+  // Documents (URLs)
   final _photoUrl = TextEditingController(text: 'https://example.com/photo.jpg');
   final _signatureUrl = TextEditingController(text: 'https://example.com/signature.jpg');
+
+  // ✅ ID Front/Back bytes
+  Uint8List? _idFrontBytes;
+  Uint8List? _idBackBytes;
+  String? _idFrontName;
+  String? _idBackName;
 
   @override
   void dispose() {
@@ -52,8 +61,48 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
     super.dispose();
   }
 
+  Future<void> _pickIdFront() async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    if (res == null || res.files.isEmpty) return;
+    final f = res.files.single;
+    if (f.bytes == null) return;
+
+    setState(() {
+      _idFrontBytes = f.bytes!;
+      _idFrontName = f.name;
+    });
+  }
+
+  Future<void> _pickIdBack() async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    if (res == null || res.files.isEmpty) return;
+    final f = res.files.single;
+    if (f.bytes == null) return;
+
+    setState(() {
+      _idBackBytes = f.bytes!;
+      _idBackName = f.name;
+    });
+  }
+
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+
+    // require uploads
+    if (_idFrontBytes == null || _idBackBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Upload ID Front and ID Back first.')),
+      );
+      return;
+    }
 
     final id = _idNumber.text.trim();
     final name = _name.text.trim();
@@ -86,9 +135,16 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
       photoUrl: _photoUrl.text.trim(),
       signatureUrl: _signatureUrl.text.trim(),
       qrData: qrData,
+      // refs are set in HomeScreen (source of truth)
     );
 
-    Navigator.pop(context, employee);
+    Navigator.pop(context, {
+      'employee': employee,
+      'idFrontBytes': _idFrontBytes,
+      'idBackBytes': _idBackBytes,
+      'idFrontName': _idFrontName,
+      'idBackName': _idBackName,
+    });
   }
 
   @override
@@ -207,6 +263,35 @@ class _AddEmployeeOverlayState extends State<AddEmployeeOverlay> {
                               _LabeledInput(label: 'Picture URL', controller: _photoUrl),
                               const SizedBox(height: 16),
                               _LabeledInput(label: 'Signature URL', controller: _signatureUrl),
+
+                              // ✅ NEW upload section
+                              const SizedBox(height: 24),
+                              _DividerLine(),
+                              const SizedBox(height: 16),
+                              _SectionTitle('ID Card Uploads'),
+                              const SizedBox(height: 16),
+
+                              _UploadField(
+                                label: 'ID Front *',
+                                fileName: _idFrontName,
+                                hasFile: _idFrontBytes != null,
+                                onPick: _pickIdFront,
+                                onClear: () => setState(() {
+                                  _idFrontBytes = null;
+                                  _idFrontName = null;
+                                }),
+                              ),
+                              const SizedBox(height: 16),
+                              _UploadField(
+                                label: 'ID Back *',
+                                fileName: _idBackName,
+                                hasFile: _idBackBytes != null,
+                                onPick: _pickIdBack,
+                                onClear: () => setState(() {
+                                  _idBackBytes = null;
+                                  _idBackName = null;
+                                }),
+                              ),
                             ],
                           ),
                         ),
@@ -371,6 +456,84 @@ class _AddEmployeeButton extends StatelessWidget {
         ),
         child: const Text('Add Employee', style: TextStyle(fontSize: 14, height: 1.43)),
       ),
+    );
+  }
+}
+
+class _UploadField extends StatelessWidget {
+  final String label;
+  final bool hasFile;
+  final String? fileName;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  const _UploadField({
+    required this.label,
+    required this.hasFile,
+    required this.onPick,
+    required this.onClear,
+    this.fileName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final display = hasFile ? (fileName ?? 'Selected') : 'No file selected';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400, height: 1)),
+        const SizedBox(height: 8),
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0x7F141428),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  display,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white.withOpacity(hasFile ? 0.9 : 0.6), fontSize: 16),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 28,
+                child: OutlinedButton(
+                  onPressed: onPick,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0x4C00D9FF), width: 1),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  child: const Text('Choose', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (hasFile)
+                SizedBox(
+                  height: 28,
+                  child: OutlinedButton(
+                    onPressed: onClear,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.white.withOpacity(0.25), width: 1),
+                      foregroundColor: Colors.white.withOpacity(0.85),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    child: const Text('Remove', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
